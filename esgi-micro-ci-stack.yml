@@ -1,0 +1,393 @@
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: false
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-vpc
+
+###### Subnets ######
+  DMZSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.10.0/28
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-dmz-subnet-public
+
+  ToolsSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.20.0/28
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-tools-subnet-private
+
+  AppsSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.30.0/28
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-apps-subnet-private
+
+  MonitoringSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.40.0/28
+      AvailabilityZone: !Select [ 0, !GetAZs ]
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-monitoring-subnet-private
+############
+
+###### Internet Gateway ######
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-internet-gateway
+
+  GatewayAttachement:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref 'VPC'
+      InternetGatewayId: !Ref 'InternetGateway'
+############
+
+###### NAT Gateway inside DMZ subnet ######
+  NATGatewayElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-nat-gateway-eip
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt 'NATGatewayElasticIp.AllocationId'
+      SubnetId: !Ref 'DMZSubnet'
+      Tags: 
+      - Key: Name
+        Value: micro-ci-1-nat-gateway
+############
+
+###### Route Tables ######
+  ### DMZ -> Internet Gateway
+  DMZRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+        - Key: Name
+          Value: micro-ci-1-dmz-rt
+
+  DMZRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref 'DMZRouteTable'
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref 'InternetGateway'
+  
+  DMZRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'DMZSubnet'
+      RouteTableId: !Ref 'DMZRouteTable'
+
+  ### Tools -> NATGateway
+  ToolsRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-tools-rt
+
+  ToolsRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref 'ToolsRouteTable'
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref 'NATGateway'
+
+  ToolsRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'ToolsSubnet'
+      RouteTableId: !Ref 'ToolsRouteTable'
+
+  ### Apps -> NATGateway
+  AppsRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-apps-rt
+
+  AppsRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref 'AppsRouteTable'
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref 'NATGateway'
+
+  AppsRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'AppsSubnet'
+      RouteTableId: !Ref 'AppsRouteTable'
+############
+
+###### Security Groups (Application firewall) ######
+  APIManagementSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to Api Management
+      VpcId: !Ref 'VPC'
+      Tags: 
+      - Key: Name
+        Value: micro-ci-1-api-management-security-group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 40500
+          ToPort: 40500
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 40501
+          ToPort: 40501
+          CidrIp: 0.0.0.0/0
+
+  ToolsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to Tools
+      VpcId: !Ref 'VPC'
+      Tags: 
+      - Key: Name
+        Value: micro-ci-1-tools-security-group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 40600
+          ToPort: 40600
+          SourceSecurityGroupId: !Ref 'APIManagementSecurityGroup'
+        - IpProtocol: tcp
+          FromPort: 40601
+          ToPort: 40601
+          SourceSecurityGroupId: !Ref 'APIManagementSecurityGroup'
+        - IpProtocol: tcp
+          FromPort: 40700
+          ToPort: 40700
+          SourceSecurityGroupId: !Ref 'APIManagementSecurityGroup'
+
+  AppsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to microservices
+      VpcId: !Ref 'VPC'
+      Tags: 
+      - Key: Name
+        Value: micro-ci-1-apps-security-group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 9000
+          ToPort: 9000
+          SourceSecurityGroupId: !Ref 'ToolsSecurityGroup'
+############
+
+
+###### IAM ######
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: 
+        - !Ref SSMAccessRole
+
+  SSMAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-ssmaccess-role
+
+  StudentsIAMGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: micro-ci-1-students-grp
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+
+  StartSessionPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: MicroservicesSessionManager
+      Groups:
+        - !Ref StudentsIAMGroup
+      PolicyDocument: {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ssm:Get*","ssm:Describe*"],"Resource":"*"},{"Effect":"Allow","Action":"ssm:StartSession","Resource":"*","Condition":{"StringEquals":{"aws:ResourceTag/Access":"students-1"}}}]}
+############                
+
+###### EC2 VMs ######
+  APIManagementInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0996d3051b72b5b2c
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref APIManagementSecurityGroup
+      SubnetId: !Ref DMZSubnet
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-api-management
+      - Key: Access
+        Value: teacher
+
+  ToolsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0996d3051b72b5b2c
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref ToolsSecurityGroup
+      SubnetId: !Ref ToolsSubnet
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-tools
+      - Key: Access
+        Value: teacher
+
+  WebhookInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0996d3051b72b5b2c
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref AppsSecurityGroup
+      SubnetId: !Ref AppsSubnet
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-webhook
+      - Key: Access
+        Value: students-1
+
+  ProjectsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0996d3051b72b5b2c
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref AppsSecurityGroup
+      SubnetId: !Ref AppsSubnet
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-projects
+      - Key: Access
+        Value: students-1
+
+  CommandsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0996d3051b72b5b2c
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref AppsSecurityGroup
+      SubnetId: !Ref AppsSubnet
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-commands
+      - Key: Access
+        Value: students-1
+
+  DockerRunnerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0996d3051b72b5b2c
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref AppsSecurityGroup
+      SubnetId: !Ref AppsSubnet
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-docker-runner
+      - Key: Access
+        Value: students-1
+
+  EventsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0996d3051b72b5b2c
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref AppsSecurityGroup
+      SubnetId: !Ref AppsSubnet
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-events
+      - Key: Access
+        Value: students-1
+
+  NotificationsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0996d3051b72b5b2c
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref AppsSecurityGroup
+      SubnetId: !Ref AppsSubnet
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-notifications
+      - Key: Access
+        Value: students-1
+
+  SchedulerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0996d3051b72b5b2c
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref AppsSecurityGroup
+      SubnetId: !Ref AppsSubnet
+      Tags:
+      - Key: Name
+        Value: micro-ci-1-scheduler
+      - Key: Access
+        Value: students-1
