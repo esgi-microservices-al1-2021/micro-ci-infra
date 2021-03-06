@@ -216,6 +216,16 @@ Resources:
 
 
 ###### IAM ######
+  GithubCIUser:
+    Type: AWS::IAM::User
+    Properties: 
+      UserName: github-ci-1
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+      Policies:
+        - PolicyName: EC2StartStopPolicy
+          PolicyDocument: {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ec2:StartInstances","ec2:StopInstances"],"Resource":"arn:aws:ec2:*:*:instance/*"}]}
+
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
