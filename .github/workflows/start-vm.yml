@@ -1,0 +1,21 @@
+name: Start AWS Micro-CI VMs
+on:
+  schedule:
+    - cron: '0 9 * * *'
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_AUTOMATION_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_AUTOMATION_SECRET_KEY }}
+          aws-region: ${{ secrets.AWS_AUTOMATION_REGION }}
+      
+      - name: Start EC2 instances
+        run: |
+            aws ec2 start-instances --instance-ids `aws ec2 describe-instances --filters "Name=tag:Group,Values=micro-ci-1" --query 'Reservations[].Instances[].InstanceId' --output text`

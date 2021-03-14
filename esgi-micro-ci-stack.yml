@@ -229,7 +229,7 @@ Resources:
       UserName: automation-user-1
       Policies:
         - PolicyName: EC2StartStopPolicy
-          PolicyDocument: {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ec2:StartInstances","ec2:StopInstances"],"Resource":"arn:aws:ec2:*:*:instance/*"}]}
+          PolicyDocument: {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ec2:StartInstances","ec2:StopInstances"],"Resource":"arn:aws:ec2:*:*:instance/*"},{"Action":"ec2:Describe*","Resource":"*","Effect":"Allow"}]}
 
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -284,6 +284,8 @@ Resources:
       Tags:
       - Key: Name
         Value: micro-ci-1-api-management
+      - Key: Group
+        Value: micro-ci-1
       - Key: Access
         Value: teacher
 
@@ -299,6 +301,8 @@ Resources:
       Tags:
       - Key: Name
         Value: micro-ci-1-tools
+      - Key: Group
+        Value: micro-ci-1
       - Key: Access
         Value: teacher
 
@@ -314,6 +318,8 @@ Resources:
       Tags:
       - Key: Name
         Value: micro-ci-1-webhook
+      - Key: Group
+        Value: micro-ci-1
       - Key: Access
         Value: students-1
 
@@ -329,6 +335,8 @@ Resources:
       Tags:
       - Key: Name
         Value: micro-ci-1-projects
+      - Key: Group
+        Value: micro-ci-1
       - Key: Access
         Value: students-1
 
@@ -344,6 +352,8 @@ Resources:
       Tags:
       - Key: Name
         Value: micro-ci-1-commands
+      - Key: Group
+        Value: micro-ci-1
       - Key: Access
         Value: students-1
 
@@ -359,6 +369,8 @@ Resources:
       Tags:
       - Key: Name
         Value: micro-ci-1-docker-runner
+      - Key: Group
+        Value: micro-ci-1
       - Key: Access
         Value: students-1
 
@@ -374,6 +386,8 @@ Resources:
       Tags:
       - Key: Name
         Value: micro-ci-1-events
+      - Key: Group
+        Value: micro-ci-1
       - Key: Access
         Value: students-1
 
@@ -389,6 +403,8 @@ Resources:
       Tags:
       - Key: Name
         Value: micro-ci-1-notifications
+      - Key: Group
+        Value: micro-ci-1
       - Key: Access
         Value: students-1
 
@@ -404,5 +420,7 @@ Resources:
       Tags:
       - Key: Name
         Value: micro-ci-1-scheduler
+      - Key: Group
+        Value: micro-ci-1
       - Key: Access
         Value: students-1
